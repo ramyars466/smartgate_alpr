@@ -1,0 +1,249 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import { Video, Upload, ShieldCheck, ShieldX, ShieldAlert, Clock3, AlertTriangle, Wand2, Cpu, DoorOpen, DoorClosed, ImagePlus } from "lucide-react";
+import { useALPR, SIM_SAMPLES, type SimKind } from "@/context/ALPRContext";
+import { Panel, PageHeader, Metric, PlateBadge } from "@/components/alpr/ui";
+import { VehicleScene, PlateCrop } from "@/components/alpr/VehicleScene";
+import { Button } from "@/components/ui/button";
+import { fmtPlate, fmtTime } from "@/lib/alpr/utils";
+import type { Detected, ScanResult } from "@/lib/alpr/types";
+import { cn } from "@/lib/utils";
+
+export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Live Gate Monitor — smart gate ai" },
+      { name: "description", content: "Real-time license plate scanning, AI access decisions and boom barrier control for security guards." },
+      { property: "og:title", content: "Live Gate Monitor — smart gate ai" },
+      { property: "og:description", content: "Real-time license plate scanning, AI access decisions and boom barrier control." },
+    ],
+  }),
+  component: Monitor,
+});
+
+const FEED: { plate: string; d: Detected }[] = [
+  { plate: "KL65H4383", d: { make: "Tata Altroz", color: "White", type: "hatchback" } },
+  { plate: "MH12AB4521", d: { make: "Honda City", color: "Silver", type: "sedan" } },
+  { plate: "TN22AA7171", d: { make: "Maruti Dzire", color: "Red", type: "sedan" } },
+  { plate: "KL07CD1122", d: { make: "Hyundai Creta", color: "Black", type: "suv" } },
+];
+
+function LiveFeed() {
+  const { rtspUrl, scan } = useALPR();
+  const [i, setI] = useState(0);
+  const [auto, setAuto] = useState(false);
+  const car = FEED[i % FEED.length];
+  useEffect(() => {
+    const t = setInterval(() => setI((x) => x + 1), 7000);
+    return () => clearInterval(t);
+  }, []);
+  useEffect(() => {
+    if (!auto) return;
+    const t = setTimeout(() => void scan(car.plate, car.d), 2800);
+    return () => clearTimeout(t);
+  }, [i, auto]); // eslint-disable-line
+  return (
+    <div>
+      <div className="relative aspect-[5/3] overflow-hidden rounded-lg border border-border bg-background">
+        <div key={i} className="animate-drive absolute inset-0">
+          <VehicleScene className="h-full w-full" color={car.d.color} type={car.d.type} plate={car.plate} boxColor="var(--neon)" label="plate 0.97" />
+        </div>
+        <div className="animate-scanline pointer-events-none absolute inset-x-0 h-px bg-neon/60 shadow-[0_0_12px_var(--neon)]" />
+        <div className="absolute left-3 top-3 flex items-center gap-2 rounded bg-background/80 px-2 py-1 font-mono text-[10px]">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-destructive" />REC · CAM-01 · 25 FPS
+        </div>
+        <div className="absolute bottom-3 left-3 max-w-[70%] truncate rounded bg-background/80 px-2 py-1 font-mono text-[10px] text-muted-foreground">{rtspUrl}</div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button size="sm" onClick={() => void scan(car.plate, car.d)}><Cpu className="h-4 w-4" />Capture & Scan Frame</Button>
+        <Button size="sm" variant={auto ? "default" : "outline"} onClick={() => setAuto(!auto)}>{auto ? "Auto-scan ON" : "Enable auto-scan"}</Button>
+      </div>
+    </div>
+  );
+}
+
+const SAMPLES: { k: SimKind; muddy?: boolean }[] = [{ k: "resident" }, { k: "visitor" }, { k: "blacklisted" }, { k: "fuzzy", muddy: true }];
+
+function UploadPanel() {
+  const { scan, vehicles, simulate } = useALPR();
+  const [drag, setDrag] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const inp = useRef<HTMLInputElement>(null);
+  const handle = (f?: File) => {
+    if (!f || !/image\/(jpeg|png)/.test(f.type)) return;
+    const url = URL.createObjectURL(f);
+    setBusy(true);
+    setTimeout(() => {
+      // Mock OCR: pick a plate from the directory or an unknown one
+      const pool = [...vehicles.map((v) => ({ plate: v.plate, d: { make: v.make, color: v.color, type: v.type } as Detected })), { plate: "MH04ZX8123", d: { make: "Maruti Dzire", color: "White", type: "sedan" } as Detected }];
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      void scan(pick.plate, pick.d, url);
+      setBusy(false);
+    }, 700);
+  };
+  return (
+    <div>
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => { e.preventDefault(); setDrag(false); handle(e.dataTransfer.files[0]); }}
+        onClick={() => inp.current?.click()}
+        className={cn("flex aspect-[5/3] cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed text-center transition", drag ? "border-primary bg-primary/10" : "border-border hover:border-primary/60")}
+      >
+        <ImagePlus className="h-10 w-10 text-muted-foreground" />
+        <div className="font-medium">{busy ? "Running YOLOv8 + OCR…" : "Drop a vehicle photo or click to browse"}</div>
+        <div className="text-xs text-muted-foreground">JPEG / PNG</div>
+        <input ref={inp} type="file" accept="image/jpeg,image/png" className="hidden" onChange={(e) => handle(e.target.files?.[0])} />
+      </div>
+      <div className="mt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sample test images</div>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {SAMPLES.map(({ k, muddy }) => {
+          const s = SIM_SAMPLES[k];
+          return (
+            <button key={k} onClick={() => simulate(k)} className="overflow-hidden rounded-md border border-border text-left transition hover:border-primary">
+              <VehicleScene className="w-full" color={s.detected.color} type={s.detected.type} plate={k === "fuzzy" ? "KL65H4383" : s.ocr} box={false} muddy={muddy} />
+              <div className="px-2 py-1.5 text-xs">{s.label}</div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Banner({ r }: { r: ScanResult }) {
+  const map = {
+    resident: ["bg-success text-success-foreground", ShieldCheck, "ACCESS GRANTED — RESIDENT"],
+    visitor: ["bg-warning text-warning-foreground", Clock3, `VISITOR GRANTED — Valid until ${r.pass ? fmtTime(r.pass.expiresAt) : "10:00 PM"}`],
+    denied: ["bg-destructive text-destructive-foreground", ShieldX, "ACCESS DENIED — UNREGISTERED VEHICLE"],
+    mismatch: ["bg-destructive text-destructive-foreground", ShieldX, "ACCESS HELD — VERIFY VEHICLE"],
+    fuzzy: r.resolved ? ["bg-success text-success-foreground", ShieldCheck, "ACCESS GRANTED — OCR CORRECTED"] : ["bg-primary text-primary-foreground", Wand2, "LOW-CONFIDENCE READ — GUARD REVIEW"],
+    blacklisted: ["bg-destructive text-destructive-foreground animate-pulse", ShieldAlert, "CRITICAL ALERT: BLACKLISTED VEHICLE DETECTED"],
+  } as const;
+  const [cls, Icon, text] = map[r.kind] as unknown as [string, typeof ShieldCheck, string];
+  return <div className={cn("flex items-center gap-3 rounded-lg px-4 py-3 text-base font-bold tracking-wide", cls)}><Icon className="h-6 w-6 shrink-0" />{text}</div>;
+}
+
+function Output() {
+  const { current: r, confirmFuzzy } = useALPR();
+  if (!r) return (
+    <Panel title="AI scan results" icon={<Cpu className="h-4 w-4" />} className="flex min-h-[420px] flex-col">
+      <div className="flex flex-1 flex-col items-center justify-center text-center text-muted-foreground">
+        <ScanLine className="mb-3 h-10 w-10" />Waiting for a vehicle. Capture a frame, upload a photo, or use the simulator.
+      </div>
+    </Panel>
+  );
+  const muddy = r.kind === "fuzzy";
+  const box = r.kind === "blacklisted" || r.kind === "denied" || r.kind === "mismatch" ? "var(--destructive)" : "var(--success)";
+  return (
+    <Panel title="AI scan results" icon={<Cpu className="h-4 w-4" />} actions={<span className="font-mono text-xs text-muted-foreground">{fmtTime(r.ts)}</span>}>
+      <div key={r.id} className="animate-fade-in space-y-4">
+        <Banner r={r} />
+        {r.kind === "mismatch" && (
+          <div className="flex gap-3 rounded-lg border border-warning/50 bg-warning/10 p-3 text-sm">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-warning" />
+            <div><div className="font-semibold text-warning">Plate / Vehicle Type Mismatch Flagged</div>
+              Plate {fmtPlate(r.plate)} is registered to a <b>{r.vehicle?.color} {r.vehicle?.type} ({r.vehicle?.make})</b>, but the camera sees a <b>{r.detected.color} {r.detected.type}</b>. Possible cloned or stolen plate.</div>
+          </div>
+        )}
+        {r.kind === "fuzzy" && r.vehicle && (
+          <div className="rounded-lg border border-primary/50 bg-primary/10 p-3 text-sm">
+            <div className="flex items-center gap-2 font-semibold text-primary"><Wand2 className="h-4 w-4" />Fuzzy OCR correction</div>
+            <p className="mt-1">OCR read <span className="font-mono font-bold">{fmtPlate(r.ocr)}</span>. <b>{r.matchPct}% match</b> with resident plate <PlateBadge plate={r.vehicle.plate} /> ({r.vehicle.owner}, {r.vehicle.flat}).</p>
+            <Button className="mt-3" size="sm" disabled={r.resolved} onClick={confirmFuzzy}>{r.resolved ? "Confirmed" : "Confirm & Grant Access"}</Button>
+          </div>
+        )}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="relative overflow-hidden rounded-lg border border-border">
+            {r.imageUrl ? (
+              <div className="relative"><img src={r.imageUrl} alt="Uploaded vehicle" className="aspect-[5/3] w-full object-cover" />
+                <div className="absolute left-[36%] top-[62%] h-[16%] w-[28%] border-2" style={{ borderColor: box }} /></div>
+            ) : (
+              <VehicleScene className="w-full" color={r.detected.color} type={r.detected.type} plate={muddy ? (r.vehicle?.plate ?? r.ocr) : r.plate} muddy={muddy} boxColor={box} label={`yolov8 ${(r.yolo / 100).toFixed(2)}`} />
+            )}
+          </div>
+          <div className="space-y-3">
+            <div><div className="mb-1 text-xs text-muted-foreground">Cropped plate</div><PlateCrop plate={muddy ? (r.vehicle?.plate ?? r.ocr) : r.plate} muddy={muddy} /></div>
+            <div><div className="text-xs text-muted-foreground">OCR text</div><div className="font-mono text-3xl font-extrabold tracking-wider">{fmtPlate(r.ocr)}</div></div>
+            <div><div className="text-xs text-muted-foreground">Vehicle classification</div><div className="font-semibold">{r.detected.color} {r.detected.make} <span className="text-muted-foreground">· {r.detected.type}</span></div></div>
+            {r.vehicle && <div className="text-sm text-muted-foreground">Registered: {r.vehicle.owner} · {r.vehicle.flat}</div>}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Metric label="Detection Speed" value={`${r.speed} ms`} />
+          <Metric label="YOLO Confidence" value={`${r.yolo}%`} tone="success" />
+          <Metric label="OCR Confidence" value={`${r.ocrConf}%`} tone={r.ocrConf < 80 ? "warning" : "success"} />
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function Barrier() {
+  const { barrier, openBarrier } = useALPR();
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 200); return () => clearInterval(t); }, []);
+  const left = barrier.closesAt ? Math.max(0, Math.ceil((barrier.closesAt - now) / 1000)) : 0;
+  return (
+    <Panel title="Gate control hardware" icon={barrier.open ? <DoorOpen className="h-4 w-4" /> : <DoorClosed className="h-4 w-4" />}>
+      <div className="flex items-center gap-5">
+        <svg viewBox="0 0 120 60" className="h-16 w-32">
+          <rect x="4" y="30" width="14" height="28" rx="2" fill="var(--muted-foreground)" />
+          <g style={{ transformOrigin: "11px 34px", transform: `rotate(${barrier.open ? -80 : 0}deg)`, transition: "transform .8s" }}>
+            <rect x="11" y="31" width="104" height="6" rx="3" fill={barrier.open ? "var(--success)" : "var(--destructive)"} />
+          </g>
+        </svg>
+        <div>
+          <div className="text-xs text-muted-foreground">Physical Boom Barrier</div>
+          <div className={cn("text-2xl font-extrabold", barrier.open ? "text-success" : "text-destructive")}>{barrier.open ? "OPEN" : "CLOSED"}</div>
+          <div className="font-mono text-xs text-muted-foreground">{barrier.override ? "Held by emergency override" : barrier.open ? `Auto-close in ${left}s` : "Locked · awaiting authorised vehicle"}</div>
+        </div>
+        <Button variant="outline" size="sm" className="ml-auto" onClick={() => openBarrier(5)} disabled={barrier.open}>Manual open</Button>
+      </div>
+    </Panel>
+  );
+}
+
+function Monitor() {
+  const [mode, setMode] = useState<"live" | "upload">("live");
+  const { logs } = useALPR();
+  return (
+    <div>
+      <PageHeader title="Live Gate Monitor & Scanner" subtitle="Real-time ALPR pipeline · YOLOv8 detection + OCR" />
+      <div className="grid gap-5 xl:grid-cols-2">
+        <div className="space-y-5">
+          <Panel title="Scanning input" actions={
+            <div className="flex rounded-md border border-border p-0.5 text-xs">
+              {(["live", "upload"] as const).map((m) => (
+                <button key={m} onClick={() => setMode(m)} className={cn("flex items-center gap-1.5 rounded px-2.5 py-1.5", mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground")}>
+                  {m === "live" ? <Video className="h-3.5 w-3.5" /> : <Upload className="h-3.5 w-3.5" />}{m === "live" ? "Live RTSP Video Stream" : "Manual File Upload"}
+                </button>
+              ))}
+            </div>
+          }>
+            {mode === "live" ? <LiveFeed /> : <UploadPanel />}
+          </Panel>
+          <Barrier />
+        </div>
+        <div className="space-y-5">
+          <Output />
+          <Panel title="Recent events">
+            <ul className="divide-y divide-border text-sm">
+              {logs.slice(0, 5).map((l) => (
+                <li key={l.id} className="flex items-center gap-3 py-2">
+                  <span className="w-14 font-mono text-xs text-muted-foreground">{fmtTime(l.ts)}</span>
+                  <PlateBadge plate={l.plate} />
+                  <span className="truncate text-muted-foreground">{l.note}</span>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ScanLine(props: { className?: string }) {
+  return <Cpu {...props} />;
+}
