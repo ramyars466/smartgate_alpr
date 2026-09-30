@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Video, Upload, ShieldCheck, ShieldX, ShieldAlert, Clock3, AlertTriangle, Wand2, Cpu, DoorOpen, DoorClosed, ImagePlus } from "lucide-react";
 import { useALPR, SIM_SAMPLES, type SimKind } from "@/context/ALPRContext";
 import { Panel, PageHeader, Metric, PlateBadge } from "@/components/alpr/ui";
@@ -23,6 +23,7 @@ export const Route = createFileRoute("/")({
 });
 
 const FEED: { plate: string; d: Detected }[] = [
+  { plate: "KA01AB1234", d: { make: "Tesla Model 3", color: "White", type: "sedan" } },
   { plate: "KL65H4383", d: { make: "Tata Altroz", color: "White", type: "hatchback" } },
   { plate: "MH12AB4521", d: { make: "Honda City", color: "Silver", type: "sedan" } },
   { plate: "TN22AA7171", d: { make: "Maruti Dzire", color: "Red", type: "sedan" } },
@@ -30,10 +31,19 @@ const FEED: { plate: string; d: Detected }[] = [
 ];
 
 function LiveFeed() {
-  const { rtspUrl, scan } = useALPR();
+  const { rtspUrl, scan, vehicles } = useALPR();
   const [i, setI] = useState(0);
   const [auto, setAuto] = useState(false);
-  const car = FEED[i % FEED.length];
+  
+  const dynamicFeed = useMemo(() => {
+    if (vehicles.length === 0) return FEED;
+    return vehicles.map((v) => ({
+      plate: v.plate,
+      d: { make: v.make || "Unknown", color: v.color || "White", type: (v.type || "sedan") as any }
+    }));
+  }, [vehicles]);
+
+  const car = dynamicFeed[i % dynamicFeed.length];
   
   useEffect(() => {
     const t = setInterval(() => setI((x) => x + 1), 7000);
