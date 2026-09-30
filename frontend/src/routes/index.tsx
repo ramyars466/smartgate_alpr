@@ -41,8 +41,10 @@ function LiveFeed() {
   );
 }
 
+const SAMPLES: { k: SimKind; muddy?: boolean }[] = [{ k: "resident" }, { k: "visitor" }, { k: "blacklisted" }, { k: "fuzzy", muddy: true }];
+
 function UploadPanel() {
-  const { handleScanResult } = useALPR();
+  const { handleScanResult, simulate } = useALPR();
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
   const inp = useRef<HTMLInputElement>(null);
@@ -74,6 +76,18 @@ function UploadPanel() {
         <div className="font-medium">{busy ? "Running YOLOv8 + OCR…" : "Drop a real vehicle photo or click to browse"}</div>
         <div className="text-xs text-muted-foreground">JPEG / PNG</div>
         <input ref={inp} type="file" accept="image/jpeg,image/png" className="hidden" onChange={(e) => handle(e.target.files?.[0])} />
+      </div>
+      <div className="mt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sample test images</div>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {SAMPLES.map(({ k, muddy }) => {
+          const s = SIM_SAMPLES[k];
+          return (
+            <button key={k} onClick={() => simulate(k)} className="overflow-hidden rounded-md border border-border text-left transition hover:border-primary">
+              <VehicleScene className="w-full" color={s.detected.color} type={s.detected.type} plate={k === "fuzzy" ? "KL65H4383" : s.ocr} box={false} muddy={muddy} />
+              <div className="px-2 py-1.5 text-xs">{s.label}</div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

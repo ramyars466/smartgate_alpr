@@ -53,6 +53,24 @@ class AccessLog(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        # Seed test vehicles for realistic simulation buttons
+        if db.query(Vehicle).count() == 0:
+            import uuid
+            now = int(time.time() * 1000)
+            
+            # Resident: KL65H4383
+            db.add(Vehicle(id=str(uuid.uuid4()), plate="KL65H4383", owner="John Doe", flat="A-101", make="Tata Altroz", color="White", type="hatchback", category="resident", registeredAt=now))
+            # Blacklisted: UP16DX0666
+            db.add(Vehicle(id=str(uuid.uuid4()), plate="UP16DX0666", owner="Unknown", flat="", make="Toyota Fortuner", color="Black", type="suv", category="blacklisted", registeredAt=now))
+            # Visitor pass for KL11BB2020
+            db.add(VisitorPass(id=str(uuid.uuid4()), guest="Alice", phone="555-0101", plate="KL11BB2020", flat="B-202", entryAt=now, expiresAt=now + 86400000, status="active"))
+            db.commit()
+    except Exception as e:
+        print(f"Error seeding DB: {e}")
+    finally:
+        db.close()
 
 def get_db():
     db = SessionLocal()
