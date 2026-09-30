@@ -119,7 +119,7 @@ function UploadPanel() {
         <div className="text-xs text-muted-foreground">JPEG / PNG</div>
         <input ref={inp} type="file" accept="image/jpeg,image/png" className="hidden" onChange={(e) => handle(e.target.files?.[0])} />
       </div>
-      <div className="mt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Sample test images</div>
+      <div className="mt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Manual Photo Overrides</div>
       <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {SAMPLES.map(({ k, muddy }) => {
           const s = SIM_SAMPLES[k];

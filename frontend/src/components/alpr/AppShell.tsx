@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ScanLine, Ticket, Car, ScrollText, BarChart3, Settings2, ChevronLeft, Volume2, VolumeX, Siren, ShieldAlert, X,
-  UserCheck, Ban, Wand2, Copy, FlaskConical, Radio,
+  UserCheck, Ban, Wand2, Copy, FlaskConical, Radio, Terminal,
 } from "lucide-react";
 import { useALPR, type SimKind } from "@/context/ALPRContext";
 import { GATES } from "@/lib/alpr/types";
@@ -64,7 +64,7 @@ function Header() {
 const SIMS: { k: SimKind; label: string; icon: typeof UserCheck; cls: string }[] = [
   { k: "resident", label: "Resident", icon: UserCheck, cls: "text-success" },
   { k: "blacklisted", label: "Blacklist", icon: Ban, cls: "text-destructive" },
-  { k: "fuzzy", label: "Fuzzy Match", icon: Wand2, cls: "text-primary" },
+  { k: "fuzzy", label: "Fuzzy OCR", icon: Wand2, cls: "text-primary" },
   { k: "mismatch", label: "Mismatch", icon: Copy, cls: "text-warning" },
 ];
 
@@ -76,19 +76,19 @@ function SimulatorToolbar() {
       {open ? (
         <div className="glass w-64 p-3 shadow-2xl">
           <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <span className="flex items-center gap-1.5"><FlaskConical className="h-3.5 w-3.5" />Simulator</span>
-            <button onClick={() => setOpen(false)} aria-label="Collapse simulator"><X className="h-3.5 w-3.5" /></button>
+            <span className="flex items-center gap-1.5"><Terminal className="h-3.5 w-3.5" />MANUAL TRIGGERS</span>
+            <button onClick={() => setOpen(false)} aria-label="Collapse triggers"><X className="h-3.5 w-3.5" /></button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {SIMS.map(({ k, label, icon: I, cls }) => (
               <button key={k} onClick={() => simulate(k)} className="flex items-center gap-1.5 rounded-md border border-border bg-secondary/70 px-2 py-2 text-xs font-medium transition hover:bg-accent">
-                <I className={cn("h-3.5 w-3.5", cls)} />Simulate {label}
+                <I className={cn("h-3.5 w-3.5", cls)} />Trigger {label}
               </button>
             ))}
           </div>
         </div>
       ) : (
-        <Button onClick={() => setOpen(true)} size="sm"><FlaskConical className="h-4 w-4" />Simulator</Button>
+        <Button onClick={() => setOpen(true)} size="sm"><Terminal className="h-4 w-4" />Manual Triggers</Button>
       )}
     </div>
   );
