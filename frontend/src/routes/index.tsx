@@ -31,17 +31,24 @@ const FEED: { plate: string; d: Detected }[] = [
 ];
 
 function LiveFeed() {
-  const { rtspUrl, scan, vehicles } = useALPR();
+  const { rtspUrl, scan, vehicles, passes } = useALPR();
   const [i, setI] = useState(0);
   const [auto, setAuto] = useState(false);
   
   const dynamicFeed = useMemo(() => {
-    if (vehicles.length === 0) return FEED;
-    return vehicles.map((v) => ({
-      plate: v.plate,
-      d: { make: v.make || "Unknown", color: v.color || "White", type: (v.type || "sedan") as any }
-    }));
-  }, [vehicles]);
+    let list: typeof FEED = [];
+    vehicles.forEach(v => list.push({ plate: v.plate, d: { make: v.make || "Unknown", color: v.color || "White", type: (v.type || "sedan") as any } }));
+    passes.forEach(p => list.push({ plate: p.plate, d: { make: "Guest Car", color: "Silver", type: "sedan" } }));
+    
+    // Inject unregistered cars for realistic access denied testing
+    list.push({ plate: "MH12AB4521", d: { make: "Honda City", color: "Silver", type: "sedan" } });
+    list.push({ plate: "DL8CX9090", d: { make: "Unknown", color: "Black", type: "suv" } });
+
+    if (list.length === 2 && vehicles.length === 0 && passes.length === 0) return FEED;
+
+    // Shuffle so granted, denied, and visitors are mixed realistically
+    return list.sort(() => Math.random() - 0.5);
+  }, [vehicles, passes]);
 
   const car = dynamicFeed[i % dynamicFeed.length];
   
