@@ -253,6 +253,8 @@ async def scan_plate(file: UploadFile = File(...), db: Session = Depends(get_db)
     image_bytes = await file.read()
     results = process_image(image_bytes=image_bytes)
     extracted_text = results.get("extracted_text", "UNKNOWN")
+    if extracted_text:
+        extracted_text = "".join(c for c in extracted_text if c.isalnum()).upper()
     if not extracted_text:
         extracted_text = "UNKNOWN"
         
@@ -261,7 +263,12 @@ async def scan_plate(file: UploadFile = File(...), db: Session = Depends(get_db)
     # Check blacklist & vehicles
     vehicles = db.query(Vehicle).all()
     passes = db.query(VisitorPass).filter(VisitorPass.status == "active").all()
-    vehicle_match = next((v for v in vehicles if v.plate == extracted_text), None)
+    
+    # Helper to normalize DB plates just in case they were saved with spaces/dashes
+    def norm(p):
+        return "".join(c for c in (p or "") if c.isalnum()).upper()
+
+    vehicle_match = next((v for v in vehicles if norm(v.plate) == extracted_text), None)
     
     base_res = {
         "id": f"scan_{int(time.time()*1000)}",
