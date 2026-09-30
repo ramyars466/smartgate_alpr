@@ -126,13 +126,20 @@ export function ALPRProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(KEY, JSON.stringify({ vehicles, passes, logs: logs.slice(0, 500), endpoint, rtspUrl }));
   }, [vehicles, passes, logs, endpoint, rtspUrl, loaded]);
 
-  // websocket heartbeat simulation + backend ping
+  // real backend ping and latency tracking
   useEffect(() => {
-    const t = setInterval(() => {
-      setLatency((l) => [...l.slice(-39), Math.round(12 + Math.random() * 14 + (Math.random() < 0.05 ? 40 : 0))]);
+    const t = setInterval(async () => {
+      const start = performance.now();
+      const p = await api.ping();
+      if (p.online) {
+        const ms = Math.max(1, Math.round(performance.now() - start));
+        setLatency((l) => [...l.slice(-39), ms]);
+        setBackendOnline(true);
+      } else {
+        setBackendOnline(false);
+      }
     }, 2000);
-    const p = setInterval(async () => setBackendOnline((await api.ping()).online), 15000);
-    return () => { clearInterval(t); clearInterval(p); };
+    return () => clearInterval(t);
   }, []);
 
   // barrier auto close

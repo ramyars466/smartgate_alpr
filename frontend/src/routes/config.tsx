@@ -46,7 +46,7 @@ function Config() {
 
   return (
     <div>
-      <PageHeader title="System & Hardware API Configuration" subtitle="Backend, camera and IoT controller settings" actions={<Button variant="outline" onClick={resetData}><RotateCcw className="h-4 w-4" />Reset demo data</Button>} />
+      <PageHeader title="System & Hardware API Configuration" subtitle="Backend, camera and IoT controller settings" />
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel title="FastAPI backend" icon={<Server className="h-4 w-4" />}>
           <Label>Endpoint</Label>
