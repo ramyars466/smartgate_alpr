@@ -32,15 +32,14 @@ function Analytics() {
     const today = logs.filter((l) => l.ts >= t0 && entered(l)).length;
     const yest = logs.filter((l) => l.ts >= y0 && l.ts < t0 && entered(l)).length;
     const hourly = Array.from({ length: 24 }, (_, h) => {
-      const base = Math.round(4 + 22 * Math.exp(-((h - 9) ** 2) / 4) + 18 * Math.exp(-((h - 19) ** 2) / 5));
       const real = logs.filter((l) => l.ts >= t0 && new Date(l.ts).getHours() === h);
-      return { hour: `${String(h).padStart(2, "0")}:00`, entries: base + real.filter(entered).length, exits: Math.round(base * 0.85 + (h > 16 ? 4 : 0)) };
+      return { hour: `${String(h).padStart(2, "0")}:00`, entries: real.filter(entered).length, exits: 0 };
     });
     const residents = logs.filter((l) => l.status === "granted").length;
     const visitors = logs.filter((l) => l.status === "visitor").length;
-    const delivery = Math.round(visitors * 0.6) + 4;
+    const delivery = 0; // Real delivery tracking not yet implemented in backend
     const overstay = passes.filter((p) => p.status === "active" && p.enteredAt && Date.now() - p.enteredAt > 4 * 3600000);
-    const inside = Math.min(CAP, 128 + vehicles.filter((v) => v.category === "resident").length + passes.filter((p) => p.status === "active" && p.enteredAt).length);
+    const inside = vehicles.filter((v) => v.category === "resident").length + passes.filter((p) => p.status === "active" && p.enteredAt).length;
     return { today, yest, hourly, mix: [{ name: "Residents", value: residents }, { name: "Visitors", value: visitors }, { name: "Delivery", value: delivery }], overstay, inside };
   }, [logs, passes, vehicles]);
   const delta = stats.yest ? Math.round(((stats.today - stats.yest) / stats.yest) * 100) : 0;
