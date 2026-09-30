@@ -286,16 +286,19 @@ async def scan_plate(file: UploadFile = File(...), db: Session = Depends(get_db)
         "imageUrl": "data:image/jpeg;base64," + results.get("annotated_image_base64", "")
     }
     
+    def to_dict(obj):
+        return {c.name: getattr(obj, c.name) for c in obj.__table__.columns} if obj else None
+
     if vehicle_match:
         if vehicle_match.category == "blacklisted":
             base_res["kind"] = "blacklisted"
-            base_res["vehicle"] = vehicle_match.__dict__
+            base_res["vehicle"] = to_dict(vehicle_match)
             add_db_log(db, base_res, "blacklisted", "BLACKLIST HIT - Security dispatched", "Main Gate")
             return base_res
             
         if vehicle_match.category == "resident":
             base_res["kind"] = "resident"
-            base_res["vehicle"] = vehicle_match.__dict__
+            base_res["vehicle"] = to_dict(vehicle_match)
             add_db_log(db, base_res, "granted", "Resident auto-access", "Main Gate")
             asyncio.create_task(trigger_relay(None))
             return base_res
@@ -306,9 +309,9 @@ async def scan_plate(file: UploadFile = File(...), db: Session = Depends(get_db)
     
     if pass_match or (vehicle_match and vehicle_match.category == "visitor"):
         base_res["kind"] = "visitor"
-        if vehicle_match: base_res["vehicle"] = vehicle_match.__dict__
+        if vehicle_match: base_res["vehicle"] = to_dict(vehicle_match)
         if pass_match: 
-            base_res["pass"] = pass_match.__dict__
+            base_res["pass"] = to_dict(pass_match)
             if pass_match.enteredAt is None:
                 pass_match.enteredAt = now
                 db.commit()
@@ -324,7 +327,7 @@ async def scan_plate(file: UploadFile = File(...), db: Session = Depends(get_db)
         if score >= 80:
             best_veh = next((v for v in vehicles if v.plate == best_match), None)
             base_res["kind"] = "fuzzy"
-            base_res["vehicle"] = best_veh.__dict__ if best_veh else None
+            base_res["vehicle"] = to_dict(best_veh)
             base_res["matchPct"] = score
             base_res["ocrConf"] = results.get("confidence", 89.5)
             # Log as denied because it needs guard approval
