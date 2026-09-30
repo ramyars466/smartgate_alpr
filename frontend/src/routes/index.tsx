@@ -22,20 +22,45 @@ export const Route = createFileRoute("/")({
   component: Monitor,
 });
 
+const FEED: { plate: string; d: Detected }[] = [
+  { plate: "KL65H4383", d: { make: "Tata Altroz", color: "White", type: "hatchback" } },
+  { plate: "MH12AB4521", d: { make: "Honda City", color: "Silver", type: "sedan" } },
+  { plate: "TN22AA7171", d: { make: "Maruti Dzire", color: "Red", type: "sedan" } },
+  { plate: "KL07CD1122", d: { make: "Hyundai Creta", color: "Black", type: "suv" } },
+];
+
 function LiveFeed() {
-  const { rtspUrl } = useALPR();
+  const { rtspUrl, scan } = useALPR();
+  const [i, setI] = useState(0);
+  const [auto, setAuto] = useState(false);
+  const car = FEED[i % FEED.length];
+  
+  useEffect(() => {
+    const t = setInterval(() => setI((x) => x + 1), 7000);
+    return () => clearInterval(t);
+  }, []);
+  
+  useEffect(() => {
+    if (!auto) return;
+    const t = setTimeout(() => void scan(car.plate, car.d), 2800);
+    return () => clearTimeout(t);
+  }, [i, auto, scan, car]);
+
   return (
     <div>
-      <div className="relative flex aspect-[5/3] flex-col items-center justify-center overflow-hidden rounded-lg border border-border bg-black/80">
-        <Video className="h-12 w-12 text-muted-foreground/50 mb-2" />
-        <div className="font-mono text-sm text-muted-foreground">NO LIVE VIDEO STREAM</div>
+      <div className="relative aspect-[5/3] overflow-hidden rounded-lg border border-border bg-background">
+        <div key={i} className="animate-drive absolute inset-0">
+          <VehicleScene className="h-full w-full" color={car.d.color} type={car.d.type} plate={car.plate} boxColor="var(--neon)" label="plate 0.97" />
+        </div>
+        <div className="animate-scanline pointer-events-none absolute inset-x-0 h-px bg-neon/60 shadow-[0_0_12px_var(--neon)]" />
         <div className="absolute left-3 top-3 flex items-center gap-2 rounded bg-background/80 px-2 py-1 font-mono text-[10px]">
-          <span className="h-2 w-2 rounded-full bg-muted-foreground" />OFFLINE
+          <span className="h-2 w-2 animate-pulse rounded-full bg-destructive" />REC · CAM-01 · 25 FPS
         </div>
         <div className="absolute bottom-3 left-3 max-w-[70%] truncate rounded bg-background/80 px-2 py-1 font-mono text-[10px] text-muted-foreground">{rtspUrl}</div>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button size="sm" disabled><Cpu className="h-4 w-4" />Capture & Scan Frame</Button>
+        <Button size="sm" onClick={() => void scan(car.plate, car.d)}><Cpu className="h-4 w-4" />Capture & Scan Frame</Button>
+        <Button size="sm" variant={auto ? "default" : "outline"} onClick={() => setAuto(!auto)}>{auto ? "Auto-scan ON" : "Enable auto-scan"}</Button>
       </div>
     </div>
   );
