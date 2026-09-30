@@ -34,7 +34,7 @@ interface Ctx {
   criticalAlert: ScanResult | null;
   dismissAlert: () => void;
   scan: (ocr: string, detected: Detected, imageUrl?: string) => Promise<ScanResult>;
-  simulate: (k: SimKind) => void;
+
   confirmFuzzy: () => void;
   addVehicle: (v: Omit<Vehicle, "id" | "registeredAt">) => void;
   updateVehicle: (id: string, v: Partial<Vehicle>) => void;
@@ -210,8 +210,6 @@ export function ALPRProvider({ children }: { children: ReactNode }) {
     return r;
   }, [classify, gate, handleScanResult]);
 
-  const simulate = useCallback((k: SimKind) => { const s = SIM_SAMPLES[k]; void scan(s.ocr, s.detected); }, [scan]);
-
   const confirmFuzzy = useCallback(() => {
     setCurrent((c) => {
       if (!c || c.kind !== "fuzzy" || c.resolved) return c;
@@ -229,7 +227,7 @@ export function ALPRProvider({ children }: { children: ReactNode }) {
   const value: Ctx = useMemo(() => ({
     vehicles, passes, logs, gate, setGate, muted, setMuted, latency, backendOnline,
     endpoint, setEndpoint: (s) => { setEndpointState(s); api.setEndpoint(s); void api.ping().then((r) => setBackendOnline(r.online)); },
-    rtspUrl, setRtspUrl, barrier, openBarrier, toggleOverride, current, criticalAlert, dismissAlert, scan, simulate, confirmFuzzy,
+    rtspUrl, setRtspUrl, barrier, openBarrier, toggleOverride, current, criticalAlert, dismissAlert, scan, confirmFuzzy,
     addVehicle: (v) => {
       const newV = { ...v, plate: normPlate(v.plate), id: uid(), registeredAt: Date.now() };
       setVehicles((vs) => [newV, ...vs]);
@@ -281,7 +279,7 @@ export function ALPRProvider({ children }: { children: ReactNode }) {
       // NOTE: backend resetting skipped in UI for safety. We rely on initial sqlite seeding.
     },
     handleScanResult
-  }), [vehicles, passes, logs, gate, muted, latency, backendOnline, endpoint, rtspUrl, barrier, openBarrier, toggleOverride, current, criticalAlert, dismissAlert, scan, simulate, confirmFuzzy, handleScanResult]);
+  }), [vehicles, passes, logs, gate, muted, latency, backendOnline, endpoint, rtspUrl, barrier, openBarrier, toggleOverride, current, criticalAlert, dismissAlert, scan, confirmFuzzy, handleScanResult]);
 
   if (!loaded) return null;
   return <ALPRContext.Provider value={value}>{children}</ALPRContext.Provider>;
