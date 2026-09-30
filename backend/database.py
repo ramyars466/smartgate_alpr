@@ -1,7 +1,6 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, Enum
+import time
+from sqlalchemy import create_engine, Column, String, Integer, Float, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker
-from datetime import datetime, timedelta
-import enum
 
 DATABASE_URL = "sqlite:///./smartgate.db"
 
@@ -10,46 +9,50 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-class VehicleCategory(str, enum.Enum):
-    RESIDENT = "Resident"
-    VISITOR = "Pre-Approved Visitor"
-    BLACKLISTED = "Blacklisted"
+class Vehicle(Base):
+    __tablename__ = "vehicles"
+    id = Column(String, primary_key=True, index=True)
+    plate = Column(String, index=True, unique=True)
+    owner = Column(String)
+    flat = Column(String)
+    make = Column(String)
+    color = Column(String)
+    type = Column(String) # hatchback, sedan, suv, van
+    category = Column(String) # resident, visitor, blacklisted
+    registeredAt = Column(Integer)
 
-class Direction(str, enum.Enum):
-    ENTRY = "ENTRY"
-    EXIT = "EXIT"
-
-class RegisteredVehicle(Base):
-    __tablename__ = "registered_vehicles"
-    plate_number = Column(String, primary_key=True, index=True)
-    owner_name = Column(String)
-    category = Column(String, default=VehicleCategory.RESIDENT.value)
-    is_inside = Column(Boolean, default=False)
-    last_entry_time = Column(DateTime, nullable=True)
+class VisitorPass(Base):
+    __tablename__ = "visitor_passes"
+    id = Column(String, primary_key=True, index=True)
+    guest = Column(String)
+    phone = Column(String)
+    plate = Column(String, index=True)
+    flat = Column(String)
+    entryAt = Column(Integer)
+    expiresAt = Column(Integer)
+    status = Column(String) # active, revoked
+    enteredAt = Column(Integer, nullable=True)
 
 class AccessLog(Base):
     __tablename__ = "access_logs"
-    id = Column(Integer, primary_key=True, index=True)
-    plate_number = Column(String, index=True)
-    status = Column(String) # "Access Granted" or "Access Denied" or "Blacklist Alert"
-    direction = Column(String) # ENTRY or EXIT
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    id = Column(String, primary_key=True, index=True)
+    ts = Column(Integer)
+    gate = Column(String)
+    plate = Column(String, index=True)
+    ocr = Column(String)
+    status = Column(String) # granted, visitor, denied, blacklisted, overstay
+    note = Column(String)
+    make = Column(String)
+    color = Column(String)
+    type = Column(String)
+    yolo = Column(Float)
+    ocrConf = Column(Float)
+    speed = Column(Integer)
+    durationMin = Column(Integer, nullable=True)
+    imageUrl = Column(String, nullable=True)
 
 def init_db():
-    # We will drop and recreate for this prototype to ensure schema changes apply cleanly
-    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    
-    if db.query(RegisteredVehicle).count() == 0:
-        db.add_all([
-            RegisteredVehicle(plate_number="KA01MG5678", owner_name="John Doe", category=VehicleCategory.RESIDENT.value),
-            RegisteredVehicle(plate_number="KL65H4383", owner_name="Alice Smith", category=VehicleCategory.RESIDENT.value),
-            RegisteredVehicle(plate_number="MH12AB1234", owner_name="Delivery Man", category=VehicleCategory.VISITOR.value),
-            RegisteredVehicle(plate_number="DL8CX9876", owner_name="Unknown Suspect", category=VehicleCategory.BLACKLISTED.value)
-        ])
-        db.commit()
-    db.close()
 
 def get_db():
     db = SessionLocal()
@@ -57,7 +60,3 @@ def get_db():
         yield db
     finally:
         db.close()
-
-if __name__ == "__main__":
-    init_db()
-    print("Database models updated and re-initialized.")

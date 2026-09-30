@@ -45,6 +45,7 @@ interface Ctx {
   extendPass: (id: string, hours: number) => void;
   updateLogNote: (id: string, note: string) => void;
   resetData: () => void;
+  handleScanResult: (r: ScanResult) => void;
 }
 
 const ALPRContext = createContext<Ctx | null>(null);
@@ -76,21 +77,49 @@ export function ALPRProvider({ children }: { children: ReactNode }) {
   mutedRef.current = muted;
 
   // load / seed
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) {
-        const d = JSON.parse(raw);
-        setVehicles(d.vehicles); setPasses(d.passes); setLogs(d.logs);
-        if (d.endpoint) { setEndpointState(d.endpoint); api.setEndpoint(d.endpoint); }
-        if (d.rtspUrl) setRtspUrl(d.rtspUrl);
-        setLoaded(true);
-        return;
-      }
-    } catch { /* reseed */ }
-    const v = seedVehicles();
-    setVehicles(v); setPasses(seedPasses()); setLogs(seedLogs(v)); setLoaded(true);
+  const loadLiveData = useCallback(async () => {
+    const isUp = (await api.ping()).online;
+    setBackendOnline(isUp);
+    
+    if (isUp) {
+      const liveVehicles = await api.getVehicles(() => []);
+      const livePasses = await api.getPasses(() => []);
+      const liveLogs = await api.getLogs(() => []);
+      
+      setVehicles(liveVehicles);
+      setPasses(livePasses);
+      setLogs(liveLogs);
+      setLoaded(true);
+    } else {
+      // Fallback to localstorage or seeds if offline
+      try {
+        const raw = localStorage.getItem(KEY);
+        if (raw) {
+          const d = JSON.parse(raw);
+          setVehicles(d.vehicles); setPasses(d.passes); setLogs(d.logs);
+          setLoaded(true);
+          return;
+        }
+      } catch { /* ignore */ }
+      const v = seedVehicles();
+      setVehicles(v); setPasses(seedPasses()); setLogs(seedLogs(v)); 
+      setLoaded(true);
+    }
   }, []);
+
+  useEffect(() => {
+    loadLiveData();
+    
+    // Also set up polling for logs every 5 seconds to keep dashboard live
+    const poll = setInterval(async () => {
+      if (api.isOnline()) {
+         const liveLogs = await api.getLogs(() => []);
+         setLogs(liveLogs);
+      }
+    }, 5000);
+    
+    return () => clearInterval(poll);
+  }, [loadLiveData]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -103,7 +132,6 @@ export function ALPRProvider({ children }: { children: ReactNode }) {
       setLatency((l) => [...l.slice(-39), Math.round(12 + Math.random() * 14 + (Math.random() < 0.05 ? 40 : 0))]);
     }, 2000);
     const p = setInterval(async () => setBackendOnline((await api.ping()).online), 15000);
-    void api.ping().then((r) => setBackendOnline(r.online));
     return () => { clearInterval(t); clearInterval(p); };
   }, []);
 
@@ -121,12 +149,15 @@ export function ALPRProvider({ children }: { children: ReactNode }) {
   const toggleOverride = useCallback(() => {
     setBarrier((b) => {
       const next = !b.override;
-      toast[next ? "warning" : "success"](next ? "EMERGENCY OVERRIDE: all barriers held open" : "Override released — normal operation");
+      toast[next ? "warning" : "success"](next ? "EMERGENCY OVERRIDE: all barriers held open" : "Override released - normal operation");
+      if (next) api.triggerRelay("Emergency Override"); // sync to backend
       return next ? { open: true, closesAt: null, override: true } : { open: false, closesAt: null, override: false };
     });
   }, []);
 
   const pushLog = useCallback((r: ScanResult, status: LogStatus, note: string) => {
+    // Note: The backend's /scan already records the log automatically.
+    // We fetch it on the next poll, but we optimistic-update the UI here.
     setLogs((l) => [{
       id: uid(), ts: Date.now(), gate, plate: r.vehicle?.plate ?? r.pass?.plate ?? r.plate, ocr: r.ocr, status, note,
       make: r.detected.make, color: r.detected.color, type: r.detected.type,
@@ -160,8 +191,7 @@ export function ALPRProvider({ children }: { children: ReactNode }) {
     return { ...base, kind: "denied" };
   }, [vehicles, passes]);
 
-  const scan = useCallback(async (ocr: string, detected: Detected, imageUrl?: string) => {
-    const r = await api.scan<ScanResult>({ ocr, detected, gate }, () => classify(ocr, detected, imageUrl));
+  const handleScanResult = useCallback((r: ScanResult) => {
     setCurrent(r);
     switch (r.kind) {
       case "resident": play(sfx.chime); openBarrier(5); pushLog(r, "granted", "Resident auto-access"); break;
@@ -172,8 +202,13 @@ export function ALPRProvider({ children }: { children: ReactNode }) {
       case "fuzzy": play(sfx.warn); break;
       case "blacklisted": if (!mutedRef.current) sfx.startAlarm(); setCriticalAlert(r); pushLog(r, "blacklisted", "BLACKLIST HIT — security dispatched"); break;
     }
+  }, [openBarrier, pushLog]);
+
+  const scan = useCallback(async (ocr: string, detected: Detected, imageUrl?: string) => {
+    const r = await api.scan<ScanResult>({ ocr, detected, gate, imageUrl }, () => classify(ocr, detected, imageUrl));
+    handleScanResult(r);
     return r;
-  }, [classify, gate, openBarrier, pushLog]);
+  }, [classify, gate, handleScanResult]);
 
   const simulate = useCallback((k: SimKind) => { const s = SIM_SAMPLES[k]; void scan(s.ocr, s.detected); }, [scan]);
 
@@ -195,16 +230,58 @@ export function ALPRProvider({ children }: { children: ReactNode }) {
     vehicles, passes, logs, gate, setGate, muted, setMuted, latency, backendOnline,
     endpoint, setEndpoint: (s) => { setEndpointState(s); api.setEndpoint(s); void api.ping().then((r) => setBackendOnline(r.online)); },
     rtspUrl, setRtspUrl, barrier, openBarrier, toggleOverride, current, criticalAlert, dismissAlert, scan, simulate, confirmFuzzy,
-    addVehicle: (v) => setVehicles((vs) => [{ ...v, plate: normPlate(v.plate), id: uid(), registeredAt: Date.now() }, ...vs]),
-    updateVehicle: (id, v) => setVehicles((vs) => vs.map((x) => (x.id === id ? { ...x, ...v, plate: normPlate(v.plate ?? x.plate) } : x))),
-    deleteVehicle: (id) => setVehicles((vs) => vs.filter((x) => x.id !== id)),
-    toggleBlacklist: (id) => setVehicles((vs) => vs.map((x) => (x.id === id ? { ...x, category: x.category === "blacklisted" ? "resident" : "blacklisted" } : x))),
-    addPass: (p) => { const np: VisitorPass = { ...p, plate: normPlate(p.plate), id: uid(), status: "active" }; setPasses((ps) => [np, ...ps]); return np; },
-    revokePass: (id) => setPasses((ps) => ps.map((p) => (p.id === id ? { ...p, status: "revoked" } : p))),
-    extendPass: (id, h) => setPasses((ps) => ps.map((p) => (p.id === id ? { ...p, expiresAt: Math.max(p.expiresAt, Date.now()) + h * 3600000 } : p))),
-    updateLogNote: (id, note) => setLogs((ls) => ls.map((l) => (l.id === id ? { ...l, note } : l))),
-    resetData: () => { const v = seedVehicles(); setVehicles(v); setPasses(seedPasses()); setLogs(seedLogs(v)); toast.success("Demo data reset"); },
-  }), [vehicles, passes, logs, gate, muted, latency, backendOnline, endpoint, rtspUrl, barrier, openBarrier, toggleOverride, current, criticalAlert, dismissAlert, scan, simulate, confirmFuzzy]);
+    addVehicle: (v) => {
+      const newV = { ...v, plate: normPlate(v.plate), id: uid(), registeredAt: Date.now() };
+      setVehicles((vs) => [newV, ...vs]);
+      if (api.isOnline()) api.addVehicle(newV, () => newV);
+    },
+    updateVehicle: (id, v) => {
+      setVehicles((vs) => vs.map((x) => (x.id === id ? { ...x, ...v, plate: normPlate(v.plate ?? x.plate) } : x)));
+      if (api.isOnline()) api.updateVehicle(id, v, () => ({} as any));
+    },
+    deleteVehicle: (id) => {
+      setVehicles((vs) => vs.filter((x) => x.id !== id));
+      if (api.isOnline()) api.deleteVehicle(id, () => {});
+    },
+    toggleBlacklist: (id) => {
+      setVehicles((vs) => {
+        const v = vs.find(x => x.id === id);
+        if (v && api.isOnline()) {
+          api.updateVehicle(id, { category: v.category === "blacklisted" ? "resident" : "blacklisted" }, () => v);
+        }
+        return vs.map((x) => (x.id === id ? { ...x, category: x.category === "blacklisted" ? "resident" : "blacklisted" } : x));
+      });
+    },
+    addPass: (p) => { 
+      const np: VisitorPass = { ...p, plate: normPlate(p.plate), id: uid(), status: "active" }; 
+      setPasses((ps) => [np, ...ps]); 
+      if (api.isOnline()) api.addPass(np, () => np);
+      return np; 
+    },
+    revokePass: (id) => {
+      setPasses((ps) => ps.map((p) => (p.id === id ? { ...p, status: "revoked" } : p)));
+      if (api.isOnline()) api.updatePass(id, { status: "revoked" }, () => ({} as any));
+    },
+    extendPass: (id, h) => {
+      setPasses((ps) => {
+        const p = ps.find(x => x.id === id);
+        if (p) {
+          const newExp = Math.max(p.expiresAt, Date.now()) + h * 3600000;
+          if (api.isOnline()) api.updatePass(id, { expiresAt: newExp }, () => ({} as any));
+        }
+        return ps.map((x) => (x.id === id ? { ...x, expiresAt: Math.max(x.expiresAt, Date.now()) + h * 3600000 } : x));
+      });
+    },
+    updateLogNote: (id, note) => {
+      setLogs((ls) => ls.map((l) => (l.id === id ? { ...l, note } : l)));
+      if (api.isOnline()) api.updateLogNote(id, note, () => {});
+    },
+    resetData: () => { 
+      const v = seedVehicles(); setVehicles(v); setPasses(seedPasses()); setLogs(seedLogs(v)); toast.success("Demo data reset"); 
+      // NOTE: backend resetting skipped in UI for safety. We rely on initial sqlite seeding.
+    },
+    handleScanResult
+  }), [vehicles, passes, logs, gate, muted, latency, backendOnline, endpoint, rtspUrl, barrier, openBarrier, toggleOverride, current, criticalAlert, dismissAlert, scan, simulate, confirmFuzzy, handleScanResult]);
 
   if (!loaded) return null;
   return <ALPRContext.Provider value={value}>{children}</ALPRContext.Provider>;
