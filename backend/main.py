@@ -264,11 +264,15 @@ async def scan_plate(file: UploadFile = File(...), db: Session = Depends(get_db)
     vehicles = db.query(Vehicle).all()
     passes = db.query(VisitorPass).filter(VisitorPass.status == "active").all()
     
-    # Helper to normalize DB plates just in case they were saved with spaces/dashes
     def norm(p):
         return "".join(c for c in (p or "") if c.isalnum()).upper()
 
+    print(f"DEBUG - extracted_text: '{extracted_text}'")
+    for v in vehicles:
+        print(f"DEBUG - checking plate: '{v.plate}' -> norm: '{norm(v.plate)}' == '{extracted_text}' ? {norm(v.plate) == extracted_text}")
+
     vehicle_match = next((v for v in vehicles if norm(v.plate) == extracted_text), None)
+    print(f"DEBUG - vehicle_match found: {vehicle_match is not None}")
     
     base_res = {
         "id": f"scan_{int(time.time()*1000)}",
@@ -298,7 +302,7 @@ async def scan_plate(file: UploadFile = File(...), db: Session = Depends(get_db)
             
     # Check passes
     now = int(time.time() * 1000)
-    pass_match = next((p for p in passes if p.plate == extracted_text and p.expiresAt > now), None)
+    pass_match = next((p for p in passes if norm(p.plate) == extracted_text and p.expiresAt > now), None)
     
     if pass_match or (vehicle_match and vehicle_match.category == "visitor"):
         base_res["kind"] = "visitor"
@@ -312,6 +316,20 @@ async def scan_plate(file: UploadFile = File(...), db: Session = Depends(get_db)
         add_db_log(db, base_res, "visitor", "Visitor Access", "Main Gate")
         asyncio.create_task(trigger_relay(None))
         return base_res
+
+    # Fuzzy match
+    plates = [v.plate for v in vehicles if v.category != "blacklisted"]
+    if plates:
+        best_match, score = process.extractOne(extracted_text, plates)
+        if score >= 80:
+            best_veh = next((v for v in vehicles if v.plate == best_match), None)
+            base_res["kind"] = "fuzzy"
+            base_res["vehicle"] = best_veh.__dict__ if best_veh else None
+            base_res["matchPct"] = score
+            base_res["ocrConf"] = results.get("confidence", 89.5)
+            # Log as denied because it needs guard approval
+            add_db_log(db, base_res, "denied", "Fuzzy match - Guard approval needed", "Main Gate")
+            return base_res
         
     # Denied
     base_res["kind"] = "denied"
