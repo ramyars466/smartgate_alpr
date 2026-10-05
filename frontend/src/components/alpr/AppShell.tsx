@@ -146,9 +146,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
-        <button onClick={() => setCollapsed(!collapsed)} className="m-2 flex items-center justify-center gap-2 rounded-md border border-sidebar-border py-2 text-xs text-muted-foreground hover:bg-sidebar-accent">
-          <ChevronLeft className={cn("h-4 w-4 transition", collapsed && "rotate-180")} />{!collapsed && "Collapse"}
-        </button>
+        <div className="mt-auto flex flex-col gap-1 p-2">
+          <button onClick={logout} className="flex items-center justify-center gap-2 rounded-md py-2 text-xs text-red-500 hover:bg-red-500/10 transition">
+            <LogOut className="h-4 w-4" />{!collapsed && "Log out"}
+          </button>
+          <button onClick={() => setCollapsed(!collapsed)} className="flex items-center justify-center gap-2 rounded-md border border-sidebar-border py-2 text-xs text-muted-foreground hover:bg-sidebar-accent transition">
+            <ChevronLeft className={cn("h-4 w-4 transition", collapsed && "rotate-180")} />{!collapsed && "Collapse"}
+          </button>
+        </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />
