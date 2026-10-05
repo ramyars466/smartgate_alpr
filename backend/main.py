@@ -203,11 +203,16 @@ async def lovable_scan(request: Request, db: Session = Depends(get_db)):
             return base_res
             
         if vehicle_match.category == "resident":
-            if vehicle_match.type != detected.get("type") or vehicle_match.color != detected.get("color"):
+            if vehicle_match.type.lower() != detected.get("type", "").lower() or vehicle_match.color.lower() != detected.get("color", "").lower():
                 base_res["kind"] = "mismatch"
                 base_res["vehicle"] = vehicle_match.__dict__
-                add_db_log(db, base_res, "denied", "Plate / vehicle type mismatch - possible cloned plate", gate)
+                add_db_log(db, base_res, "denied", "SECURITY BREACH: Cloned Plate Detected (Vehicle Mismatch)", gate)
                 return base_res
+                
+            base_res["kind"] = "resident"
+            base_res["vehicle"] = vehicle_match.__dict__
+            add_db_log(db, base_res, "granted", "Resident auto-access", gate)
+            return base_res
                 
             base_res["kind"] = "resident"
             base_res["vehicle"] = vehicle_match.__dict__
@@ -223,13 +228,27 @@ async def lovable_scan(request: Request, db: Session = Depends(get_db)):
         if vehicle_match: base_res["vehicle"] = vehicle_match.__dict__
         if pass_match: 
             base_res["pass"] = pass_match.__dict__
-            # mark entered
+            # mark entered or exited
             if pass_match.enteredAt is None:
                 pass_match.enteredAt = now
-                db.commit()
-                
+                action = "ENTRY"
+            elif pass_match.exitedAt is None:
+                pass_match.exitedAt = now
+                action = "EXIT"
+                hours = (now - pass_match.enteredAt) / 3600000
+                if hours > 2:
+                    fee = round((hours - 2) * 50)
+                    base_res["fee"] = fee
+            else:
+                pass_match.enteredAt = now
+                pass_match.exitedAt = None
+                action = "ENTRY"
+            db.commit()
+            
         flat_dest = pass_match.flat if pass_match else (vehicle_match.flat if vehicle_match else "Unknown")
-        add_db_log(db, base_res, "visitor", f"Visitor for {flat_dest}", gate)
+        note = f"Visitor {action} (Flat {flat_dest})" if pass_match else f"Visitor Access for {flat_dest}"
+        if "fee" in base_res: note += f" - Parking Fee: ₹{base_res['fee']}"
+        add_db_log(db, base_res, "visitor", note, gate)
         return base_res
         
     # Fuzzy match
@@ -298,6 +317,13 @@ async def scan_plate(file: UploadFile = File(...), db: Session = Depends(get_db)
             return base_res
             
         if vehicle_match.category == "resident":
+            # For demonstration, we will fake a mismatch if 'mismatch' is in the plate string
+            if "MISMATCH" in extracted_text or vehicle_match.type.lower() != detected.get("type", vehicle_match.type).lower():
+                base_res["kind"] = "mismatch"
+                base_res["vehicle"] = to_dict(vehicle_match)
+                add_db_log(db, base_res, "denied", "SECURITY BREACH: Cloned Plate Detected (Vehicle Mismatch)", "Main Gate")
+                return base_res
+                
             base_res["kind"] = "resident"
             base_res["vehicle"] = to_dict(vehicle_match)
             add_db_log(db, base_res, "granted", "Resident auto-access", "Main Gate")
