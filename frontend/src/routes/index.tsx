@@ -46,8 +46,9 @@ function LiveFeed() {
 
     if (list.length === 2 && vehicles.length === 0 && passes.length === 0) return FEED;
 
-    // Shuffle so granted, denied, and visitors are mixed realistically
-    return list.sort(() => Math.random() - 0.5);
+    // Instead of shuffling, put the most recently added vehicles/passes first
+    // so users don't have to wait 2 minutes to see their newly added car!
+    return list.reverse();
   }, [vehicles, passes]);
 
   const car = dynamicFeed[i % dynamicFeed.length];
