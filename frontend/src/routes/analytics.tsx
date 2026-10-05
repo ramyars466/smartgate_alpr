@@ -38,9 +38,10 @@ function Analytics() {
     const residents = logs.filter((l) => l.status === "granted").length;
     const visitors = logs.filter((l) => l.status === "visitor").length;
     const delivery = 0; // Real delivery tracking not yet implemented in backend
-    const overstay = passes.filter((p) => p.status === "active" && p.enteredAt && Date.now() - p.enteredAt > 4 * 3600000);
-    const inside = vehicles.filter((v) => v.category === "resident").length + passes.filter((p) => p.status === "active" && p.enteredAt).length;
-    return { today, yest, hourly, mix: [{ name: "Residents", value: residents }, { name: "Visitors", value: visitors }, { name: "Delivery", value: delivery }], overstay, inside };
+    const overstay = passes.filter((p) => p.status === "active" && p.enteredAt && !p.exitedAt && Date.now() - p.enteredAt > 4 * 3600000);
+    const activeInside = passes.filter((p) => p.status === "active" && p.enteredAt && !p.exitedAt);
+    const inside = vehicles.filter((v) => v.category === "resident").length + activeInside.length;
+    return { today, yest, hourly, mix: [{ name: "Residents", value: residents }, { name: "Visitors", value: visitors }, { name: "Delivery", value: delivery }], overstay, inside, activeInside };
   }, [logs, passes, vehicles]);
   const delta = stats.yest ? Math.round(((stats.today - stats.yest) / stats.yest) * 100) : 0;
   const colors = ["var(--chart-2)", "var(--chart-3)", "var(--chart-1)"];
@@ -95,24 +96,55 @@ function Analytics() {
           </div>
         </Panel>
       </div>
-      <Panel title="Overstay alert list" className="mt-5">
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase text-muted-foreground"><tr><th className="py-2">Plate</th><th>Guest</th><th>Flat</th><th>Time inside</th><th className="text-right">Action</th></tr></thead>
-          <tbody className="divide-y divide-border">
-            {stats.overstay.map((p) => {
-              const m = Math.round((Date.now() - p.enteredAt!) / 60000);
-              return (
-                <tr key={p.id}>
-                  <td className="py-2.5"><PlateBadge plate={p.plate} /></td><td>{p.guest}</td><td>{p.flat}</td>
-                  <td className="font-mono text-warning">{Math.floor(m / 60)}h {m % 60}m</td>
-                  <td className="text-right"><Button size="sm" variant="outline" onClick={() => toast.success(`WhatsApp sent to resident of ${p.flat}`, { description: `"Your guest ${p.guest} (${p.plate}) has exceeded the 4-hour visitor limit."` })}>
-                    <MessageCircle className="h-4 w-4 text-success" />Notify Resident via WhatsApp</Button></td>
-                </tr>
-              );
-            })}
-            {!stats.overstay.length && <tr><td colSpan={5} className="py-6 text-center text-muted-foreground">No overstay violations</td></tr>}
-          </tbody>
-        </table>
+      <Panel title="Live Visitor Tracking & Overstays" icon={<TimerOff className="h-4 w-4" />} className="mt-5">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead className="border-b border-border text-xs uppercase text-muted-foreground">
+              <tr>
+                <th className="pb-2 font-medium">Plate</th>
+                <th className="pb-2 font-medium">Visitor Name</th>
+                <th className="pb-2 font-medium">Flat</th>
+                <th className="pb-2 font-medium">Time Inside</th>
+                <th className="pb-2 font-medium">Status</th>
+                <th className="pb-2 text-right font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/50">
+              {stats.activeInside.length === 0 ? (
+                <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">No visitors currently inside.</td></tr>
+              ) : (
+                stats.activeInside.map((p) => {
+                  const m = p.enteredAt ? Math.round((Date.now() - p.enteredAt) / 60000) : 0;
+                  const isOverstay = m > 240;
+                  return (
+                    <tr key={p.id} className={isOverstay ? "bg-destructive/10" : ""}>
+                      <td className="py-3 pr-4"><PlateBadge plate={p.plate} /></td>
+                      <td className="py-3 pr-4 font-medium">{p.guest}</td>
+                      <td className="py-3 pr-4">{p.flat}</td>
+                      <td className="py-3 pr-4 font-mono">{Math.floor(m / 60)}h {m % 60}m</td>
+                      <td className="py-3 pr-4">
+                        {isOverstay ? (
+                          <span className="flex items-center gap-1 font-bold text-destructive">
+                            <TimerOff className="h-4 w-4" /> OVERSTAY
+                          </span>
+                        ) : (
+                          <span className="font-semibold text-success">Inside</span>
+                        )}
+                      </td>
+                      <td className="py-3 text-right">
+                        {isOverstay && (
+                          <Button size="sm" variant="outline" className="h-8 gap-2 border-destructive text-destructive hover:bg-destructive/20" onClick={() => toast.success(`WhatsApp sent to flat ${p.flat}`)}>
+                            <MessageCircle className="h-3 w-3" /> Notify
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </Panel>
     </div>
   );

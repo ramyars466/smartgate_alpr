@@ -56,6 +56,7 @@ class VisitorPassModel(BaseModel):
     expiresAt: int
     status: str
     enteredAt: Optional[int] = None
+    exitedAt: Optional[int] = None
 
 class AccessLogModel(BaseModel):
     id: str
@@ -311,12 +312,23 @@ async def scan_plate(file: UploadFile = File(...), db: Session = Depends(get_db)
         base_res["kind"] = "visitor"
         if vehicle_match: base_res["vehicle"] = to_dict(vehicle_match)
         if pass_match: 
-            base_res["pass"] = to_dict(pass_match)
             if pass_match.enteredAt is None:
                 pass_match.enteredAt = now
-                db.commit()
-                
-        add_db_log(db, base_res, "visitor", "Visitor Access", "Main Gate")
+                action = "ENTRY"
+            elif pass_match.exitedAt is None:
+                pass_match.exitedAt = now
+                action = "EXIT"
+            else:
+                # Reset for demo repeatedly testing
+                pass_match.enteredAt = now
+                pass_match.exitedAt = None
+                action = "ENTRY"
+            db.commit()
+            base_res["pass"] = to_dict(pass_match)
+            add_db_log(db, base_res, "visitor", f"Visitor {action}", "Main Gate")
+        else:
+            add_db_log(db, base_res, "visitor", "Visitor Access", "Main Gate")
+            
         asyncio.create_task(trigger_relay(None))
         return base_res
 

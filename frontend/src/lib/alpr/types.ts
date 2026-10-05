@@ -25,6 +25,7 @@ export interface VisitorPass {
   expiresAt: number;
   status: "active" | "revoked";
   enteredAt?: number;
+  exitedAt?: number;
 }
 
 export interface LogEntry {

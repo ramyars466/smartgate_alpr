@@ -32,6 +32,7 @@ class VisitorPass(Base):
     expiresAt = Column(Integer)
     status = Column(String) # active, revoked
     enteredAt = Column(Integer, nullable=True)
+    exitedAt = Column(Integer, nullable=True)
 
 class AccessLog(Base):
     __tablename__ = "access_logs"
