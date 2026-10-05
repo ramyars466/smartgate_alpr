@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { VehicleScene } from "./VehicleScene";
+import { useAuth } from "@/context/AuthContext";
+import { LogOut } from "lucide-react";
 
 const NAV = [
   { to: "/", label: "Live Gate Monitor", icon: ScanLine },
@@ -125,6 +127,7 @@ function CriticalOverlay() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const { role, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const { barrier } = useALPR();
   return (
@@ -135,7 +138,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {!collapsed && <div><div className="font-bold leading-tight">smart gate ai</div><div className="font-mono text-[10px] tracking-widest text-muted-foreground">ALPR · v2.4</div></div>}
         </div>
         <nav className="flex-1 space-y-1 px-2">
-          {NAV.map(({ to, label, icon: I }) => (
+          {NAV.filter(n => role === "admin" || n.to === "/").map(({ to, label, icon: I }) => (
             <Link key={to} to={to} activeOptions={{ exact: to === "/" }}
               className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground/75 transition hover:bg-sidebar-accent hover:text-sidebar-foreground"
               activeProps={{ className: "bg-sidebar-accent !text-primary font-medium" }} title={label}>
@@ -150,7 +153,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />
         <nav className="flex gap-1 overflow-x-auto border-b border-border px-3 py-2 md:hidden">
-          {NAV.map(({ to, label, icon: I }) => (
+          {NAV.filter(n => role === "admin" || n.to === "/").map(({ to, label, icon: I }) => (
             <Link key={to} to={to} activeOptions={{ exact: to === "/" }} className="flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-muted-foreground" activeProps={{ className: "bg-accent !text-primary" }}>
               <I className="h-3.5 w-3.5" />{label}
             </Link>
