@@ -177,11 +177,13 @@ async def lovable_scan(request: Request, db: Session = Depends(get_db)):
     gate = data.get("gate", "Main Gate - Entry")
     image_url = data.get("imageUrl")
     
-    # 1. Check blacklist & vehicles
     vehicles = db.query(Vehicle).all()
     passes = db.query(VisitorPass).filter(VisitorPass.status == "active").all()
     
-    vehicle_match = next((v for v in vehicles if v.plate == ocr), None)
+    def norm(p):
+        return "".join(c for c in (p or "") if c.isalnum()).upper()
+
+    vehicle_match = next((v for v in vehicles if norm(v.plate) == norm(ocr)), None)
     
     base_res = {
         "id": f"scan_{int(time.time()*1000)}",
