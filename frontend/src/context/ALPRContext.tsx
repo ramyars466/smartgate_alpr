@@ -123,7 +123,16 @@ export function ALPRProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loaded) return;
-    localStorage.setItem(KEY, JSON.stringify({ vehicles, passes, logs: logs.slice(0, 500), endpoint, rtspUrl }));
+    try {
+      localStorage.setItem(KEY, JSON.stringify({ vehicles, passes, logs: logs.slice(0, 50), endpoint, rtspUrl }));
+    } catch (e) {
+      console.warn("Storage full, dropping logs from cache", e);
+      try {
+        localStorage.setItem(KEY, JSON.stringify({ vehicles, passes, logs: [], endpoint, rtspUrl }));
+      } catch (e2) {
+        console.error("Storage completely failed", e2);
+      }
+    }
   }, [vehicles, passes, logs, endpoint, rtspUrl, loaded]);
 
   // real backend ping and latency tracking
