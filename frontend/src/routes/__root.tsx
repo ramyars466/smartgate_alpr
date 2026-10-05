@@ -159,9 +159,9 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <ALPRProvider>
-        <AppShell>
-          <Outlet />
-        </AppShell>
+        <AuthProvider>
+          <RootContent />
+        </AuthProvider>
         <Toaster theme="dark" richColors position="top-center" />
       </ALPRProvider>
     </QueryClientProvider>
